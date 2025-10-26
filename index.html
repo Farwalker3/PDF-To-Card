@@ -1,10 +1,478 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-		<title></title>
-	</head>
-	<body>
-		
-	</body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Split & Process Pro</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="preload" href="https://res.cloudinary.com/kodair/image/upload/v1750721360/MaineCardworks/A7_envelope-removebg_udidyz.png" as="image" crossorigin>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        /* --- General & Typography --- */
+        :root {
+            --bg-color: #f4f7f9;
+            --panel-color: #ffffff;
+            --border-color: #dde4e9;
+            --text-color: #334155;
+            --heading-color: #0f172a;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--heading-color);
+            font-size: 2.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            font-size: 1.125rem;
+            margin-bottom: 2rem;
+            max-width: 60ch;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* --- Controls & Panels --- */
+        .panel {
+            background-color: var(--panel-color);
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .file-upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .file-upload-area:hover {
+            background-color: #fbfdff;
+            border-color: var(--primary-color);
+        }
+        #fileInput {
+            display: none;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+        .controls div {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: 500;
+        }
+        
+        .action-buttons {
+            flex-direction: row; 
+            justify-content: center;
+            align-items: center;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button img {
+            vertical-align: middle;
+            margin-right: 0.5rem;
+            filter: invert(1);
+        }
+
+        /* --- Output Area --- */
+        #output {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .output-container {
+            background-color: var(--panel-color);
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-md);
+            padding: 1rem;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .output-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        .output-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .output-container p {
+            font-size: 0.875rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0;
+            color: #64748b;
+        }
+        
+        canvas {
+             display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>PDF Split & Process Pro</h1>
+        <p>Select your PDF files, choose your processing options, and split your pages into ready-to-use images with a single click.</p>
+
+        <div class="panel">
+            <label for="fileInput" class="file-upload-area">
+                <span id="file-upload-text">Click here or drag & drop PDF files</span>
+            </label>
+            <input type="file" id="fileInput" accept=".pdf" multiple>
+
+            <div class="controls">
+                <div>
+                    <label><input type="checkbox" id="backgroundToggle" checked> Enable Background</label>
+                    <label><input type="checkbox" id="envelopeToggle" checked> Enable Envelope ✉️</label>
+                    <label><input type="checkbox" id="fullHeightToggle" disabled> Full Height Card</label>
+                </div>
+                 <div>
+                    <label>Background Color: <input type="color" id="backgroundColor" value="#474E5A"></label>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel action-buttons">
+             <button id="verticalSplitButton">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' d='M10 2.5a.5.5 0 0 0-1 0v15a.5.5 0 0 0 1 0zM2 6a2 2 0 0 1 2-2h4v12H4a2 2 0 0 1-2-2zm9 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4z'/%3E%3C/svg%3E" alt="">
+                Split Vertically
+            </button>
+            <button id="horizontalSplitButton">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' d='M17.5 10a.5.5 0 0 0 0-1h-15a.5.5 0 0 0 0 1zM14 2a2 2 0 0 1 2 2v4H4V4a2 2 0 0 1 2-2zM4 11v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4z'/%3E%3C/svg%3E" alt="">
+                Split Horizontally
+            </button>
+            <button id="quadrantSplitButton">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' d='M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z'/%3E%3C/svg%3E" alt="">
+                Split Into Quadrants
+            </button>
+        </div>
+        
+        <div id="output"></div>
+    </div>
+
+    <canvas id="compositeCanvas"></canvas>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileUploadText = document.getElementById('file-upload-text');
+        const horizontalSplitButton = document.getElementById('horizontalSplitButton');
+        const verticalSplitButton = document.getElementById('verticalSplitButton');
+        const quadrantSplitButton = document.getElementById('quadrantSplitButton');
+        const backgroundToggle = document.getElementById('backgroundToggle');
+        const backgroundColorInput = document.getElementById('backgroundColor');
+        const envelopeToggle = document.getElementById('envelopeToggle');
+        const fullHeightToggle = document.getElementById('fullHeightToggle');
+        const outputDiv = document.getElementById('output');
+
+        const envelopeImage = new Image();
+        envelopeImage.crossOrigin = 'Anonymous';
+        envelopeImage.src = 'https://res.cloudinary.com/kodair/image/upload/v1750721360/MaineCardworks/A7_envelope-removebg_udidyz.png';
+        
+        let rotatedEnvelopeCanvas = null;
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                const fileNames = Array.from(fileInput.files).map(f => f.name).join(', ');
+                fileUploadText.textContent = fileNames;
+            } else {
+                fileUploadText.textContent = 'Click here or drag & drop PDF files';
+            }
+        });
+
+        envelopeToggle.addEventListener('change', () => {
+            fullHeightToggle.disabled = envelopeToggle.checked;
+            if (envelopeToggle.checked) {
+                fullHeightToggle.checked = false;
+            }
+        });
+
+        const splitHandlers = {
+            horizontal: splitHorizontal,
+            vertical: splitVertical,
+            quadrant: splitQuadrants,
+        };
+
+        function setupButton(button, splitType) {
+            button.addEventListener('click', () => {
+                if (fileInput.files.length === 0) {
+                    alert('Please select one or more PDF files.');
+                    return;
+                }
+                
+                outputDiv.innerHTML = '<h3>Processing... Please wait.</h3>';
+
+                const fileProcessingPromises = Array.from(fileInput.files).map(file => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                            try {
+                                pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+                                const pdfData = new Uint8Array(event.target.result);
+                                const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                                
+                                if (outputDiv.innerHTML.includes('Processing')) {
+                                    outputDiv.innerHTML = '';
+                                }
+                                await processPdf(pdf, splitHandlers[splitType]);
+                                resolve();
+                            } catch (error) {
+                                reject(error);
+                            }
+                        };
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsArrayBuffer(file);
+                    });
+                });
+                
+                Promise.all(fileProcessingPromises).catch(error => {
+                    console.error('A file could not be processed:', error);
+                    alert(`An error occurred: ${error.message}`);
+                    outputDiv.innerHTML = '<h3>Processing failed. Please check the console.</h3>';
+                });
+            });
+        }
+        
+        setupButton(verticalSplitButton, 'horizontal');
+        setupButton(horizontalSplitButton, 'vertical');
+        setupButton(quadrantSplitButton, 'quadrant');
+
+        async function processPdf(pdf, splitFunction) {
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2 });
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                const renderContext = { canvasContext: tempCanvas.getContext('2d'), viewport: viewport };
+                await page.render(renderContext).promise;
+                splitFunction(tempCanvas, pageNum);
+            }
+        }
+
+        function splitHorizontal(sourceCanvas, pageNum) {
+            const halfWidth = sourceCanvas.width / 2;
+            const leftCanvas = document.createElement('canvas');
+            leftCanvas.width = halfWidth;
+            leftCanvas.height = sourceCanvas.height;
+            leftCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(leftCanvas, `Page-${pageNum}-Left.jpg`);
+
+            const rightCanvas = document.createElement('canvas');
+            rightCanvas.width = halfWidth;
+            rightCanvas.height = sourceCanvas.height;
+            rightCanvas.getContext('2d').drawImage(sourceCanvas, halfWidth, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(rightCanvas, `Page-${pageNum}-Right.jpg`);
+        }
+
+        function splitVertical(sourceCanvas, pageNum) {
+            const halfHeight = sourceCanvas.height / 2;
+            const topCanvas = document.createElement('canvas');
+            topCanvas.width = sourceCanvas.width;
+            topCanvas.height = halfHeight;
+            topCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+            processImage(topCanvas, `Page-${pageNum}-Top.jpg`);
+
+            const bottomCanvas = document.createElement('canvas');
+            bottomCanvas.width = sourceCanvas.width;
+            bottomCanvas.height = halfHeight;
+            bottomCanvas.getContext('2d').drawImage(sourceCanvas, 0, halfHeight, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+            processImage(bottomCanvas, `Page-${pageNum}-Bottom.jpg`);
+        }
+
+        function splitQuadrants(sourceCanvas, pageNum) {
+            const halfWidth = sourceCanvas.width / 2;
+            const halfHeight = sourceCanvas.height / 2;
+            const regions = [
+                { name: 'Top-Left', sx: 0, sy: 0 },
+                { name: 'Top-Right', sx: halfWidth, sy: 0 },
+                { name: 'Bottom-Left', sx: 0, sy: halfHeight },
+                { name: 'Bottom-Right', sx: halfWidth, sy: halfHeight },
+            ];
+
+            regions.forEach(region => {
+                const quadCanvas = document.createElement('canvas');
+                quadCanvas.width = halfWidth;
+                quadCanvas.height = halfHeight;
+                quadCanvas.getContext('2d').drawImage(
+                    sourceCanvas,
+                    region.sx, region.sy, halfWidth, halfHeight,
+                    0, 0, halfWidth, halfHeight
+                );
+                processImage(quadCanvas, `Page-${pageNum}-${region.name}.jpg`);
+            });
+        }
+        
+        function getRotatedEnvelope() {
+            if (rotatedEnvelopeCanvas) return rotatedEnvelopeCanvas;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = envelopeImage.naturalHeight;
+            tempCanvas.height = envelopeImage.naturalWidth;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+            tempCtx.rotate(Math.PI / 2);
+            tempCtx.drawImage(envelopeImage, -envelopeImage.naturalWidth / 2, -envelopeImage.naturalHeight / 2);
+            rotatedEnvelopeCanvas = tempCanvas;
+            return rotatedEnvelopeCanvas;
+        }
+
+        function processImage(cardCanvas, fileName) {
+            if (!backgroundToggle.checked && !envelopeToggle.checked) {
+                displayImage(cardCanvas, fileName);
+                return;
+            }
+
+            const finalCanvas = document.getElementById('compositeCanvas');
+            const finalCtx = finalCanvas.getContext('2d');
+            
+            if (!envelopeToggle.checked && fullHeightToggle.checked) {
+                const maxDimension = Math.max(cardCanvas.width, cardCanvas.height);
+                finalCanvas.width = maxDimension;
+                finalCanvas.height = maxDimension;
+                if (!backgroundToggle.checked) {
+                    finalCtx.clearRect(0, 0, maxDimension, maxDimension);
+                } else {
+                    finalCtx.fillStyle = backgroundColorInput.value;
+                    finalCtx.fillRect(0, 0, maxDimension, maxDimension);
+                }
+                const xOffset = (maxDimension - cardCanvas.width) / 2;
+                const yOffset = (maxDimension - cardCanvas.height) / 2;
+                finalCtx.drawImage(cardCanvas, xOffset, yOffset);
+                displayImage(finalCanvas, fileName);
+                return;
+            }
+
+            const finalSize = 1200;
+            finalCanvas.width = finalSize;
+            finalCanvas.height = finalSize;
+            if (!backgroundToggle.checked) {
+                finalCtx.clearRect(0, 0, finalSize, finalSize);
+            } else {
+                finalCtx.fillStyle = backgroundColorInput.value;
+                finalCtx.fillRect(0, 0, finalSize, finalSize);
+            }
+
+            const cardScaleFactor = 0.75;
+            const cardAspectRatio = cardCanvas.width / cardCanvas.height;
+            let scaledCardWidth, scaledCardHeight;
+            if (cardAspectRatio > 1) {
+                scaledCardWidth = finalSize * cardScaleFactor;
+                scaledCardHeight = scaledCardWidth / cardAspectRatio;
+            } else {
+                scaledCardHeight = finalSize * cardScaleFactor;
+                scaledCardWidth = scaledCardHeight * cardAspectRatio;
+            }
+            
+            let cardX = (finalSize / 2) - (scaledCardWidth / 2);
+            let cardY = (finalSize / 2) - (scaledCardHeight / 2);
+
+            if (envelopeToggle.checked) {
+                if (!envelopeImage.complete || envelopeImage.naturalHeight === 0) {
+                    envelopeImage.onload = () => processImage(cardCanvas, fileName);
+                    return;
+                }
+                const isHorizontal = cardCanvas.width > cardCanvas.height;
+                const envelopeSource = isHorizontal ? getRotatedEnvelope() : envelopeImage;
+
+                const PEEK = finalSize * 0.04;
+                let targetEnvelopeWidth = scaledCardWidth + PEEK;
+                let targetEnvelopeHeight = scaledCardHeight + PEEK;
+                const envelopeAspectRatio = envelopeSource.width / envelopeSource.height;
+                let scaledEnvelopeWidth = targetEnvelopeWidth;
+                let scaledEnvelopeHeight = scaledEnvelopeWidth / envelopeAspectRatio;
+                if (scaledEnvelopeHeight < targetEnvelopeHeight) {
+                    scaledEnvelopeHeight = targetEnvelopeHeight;
+                    scaledEnvelopeWidth = scaledEnvelopeHeight * envelopeAspectRatio;
+                }
+                
+                const offset = finalSize * 0.05;
+                const envelopeX = (finalSize / 2) - (scaledEnvelopeWidth / 2) - offset;
+                const envelopeY = (finalSize / 2) - (scaledEnvelopeHeight / 2) - offset;
+                cardX = (finalSize / 2) - (scaledCardWidth / 2) + offset;
+                cardY = (finalSize / 2) - (scaledCardHeight / 2) + offset;
+                
+                finalCtx.drawImage(envelopeSource, envelopeX, envelopeY, scaledEnvelopeWidth, scaledEnvelopeHeight);
+            }
+
+            finalCtx.drawImage(cardCanvas, cardX, cardY, scaledCardWidth, scaledCardHeight);
+            displayImage(finalCanvas, fileName);
+        }
+
+        function displayImage(sourceCanvas, fileName) {
+            const container = document.createElement('div');
+            container.className = 'output-container';
+            
+            const imgElement = document.createElement('img');
+            imgElement.src = sourceCanvas.toDataURL('image/png'); // Use PNG to support transparency
+            container.appendChild(imgElement);
+            
+            const instructionText = document.createElement('p');
+            instructionText.textContent = `Right-click to save ${fileName}`;
+            container.appendChild(instructionText);
+
+            outputDiv.appendChild(container);
+        }
+    </script>
+</body>
 </html>
