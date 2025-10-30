@@ -1,10 +1,387 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-		<title></title>
-	</head>
-	<body>
-		
-	</body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Split and Process</title>
+
+    <link rel="preload" href="https://res.cloudinary.com/kodair/image/upload/v1750721360/MaineCardworks/A7_envelope-removebg_udidyz.png" as="image" crossorigin>
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" as="script">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js" as="script">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        #output img {
+            max-width: 250px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        canvas {
+            display: none;
+        }
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button img {
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            display: inline-block;
+        }
+        .controls label {
+            display: inline-block;
+            margin: 5px 10px;
+        }
+        .quadrant-options {
+            border-top: 1px solid #ddd;
+            margin-top: 10px;
+            padding-top: 10px;
+        }
+        .output-container button {
+             font-size: 14px;
+             padding: 8px 12px;
+             margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>PDF Split and Process</h1>
+    <p>Select one or more PDFs and choose how to split their pages:</p>
+    <input type="file" id="fileInput" accept=".pdf" multiple>
+
+    <div class="controls">
+        <div>
+            <label>
+                <input type="checkbox" id="backgroundToggle" checked>
+                Enable Background
+            </label>
+            <label>
+                <input type="checkbox" id="envelopeToggle" checked>
+                Enable Envelope ✉️
+            </label>
+            <label>
+                <input type="checkbox" id="fullHeightToggle" disabled>
+                Full Height Card
+            </label>
+        </div>
+        <div class="quadrant-options">
+            <label>Quadrant Splitting:</label>
+            <label><input type="radio" name="quadrantMode" value="vertical" checked> Vertical Strips</label>
+            <label><input type="radio" name="quadrantMode" value="horizontal"> Horizontal Strips</label>
+        </div>
+        <div>
+            <label>
+                Background Color:
+                <input type="color" id="backgroundColor" value="#474E5A">
+            </label>
+        </div>
+    </div>
+
+    <button id="verticalSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M10 2.5a.5.5 0 0 0-1 0v15a.5.5 0 0 0 1 0zM2 6a2 2 0 0 1 2-2h4v12H4a2 2 0 0 1-2-2zm9 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4z'/%3E%3C/svg%3E" alt="Vertical Icon">
+        Split Vertically (Left & Right)
+    </button>
+    <button id="horizontalSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M17.5 10a.5.5 0 0 0 0-1h-15a.5.5 0 0 0 0 1zM14 2a2 2 0 0 1 2 2v4H4V4a2 2 0 0 1 2-2zM4 11v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4z'/%3E%3C/svg%3E" alt="Horizontal Icon">
+        Split Horizontally (Top & Bottom)
+    </button>
+    <button id="quadrantSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z'/%3E%3C/svg%3E" alt="Quadrant Icon">
+        Split Into 4
+    </button>
+
+    <div id="output"></div>
+
+    <canvas id="compositeCanvas"></canvas>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const horizontalSplitButton = document.getElementById('horizontalSplitButton');
+        const verticalSplitButton = document.getElementById('verticalSplitButton');
+        const quadrantSplitButton = document.getElementById('quadrantSplitButton');
+        const backgroundToggle = document.getElementById('backgroundToggle');
+        const backgroundColorInput = document.getElementById('backgroundColor');
+        const envelopeToggle = document.getElementById('envelopeToggle');
+        const fullHeightToggle = document.getElementById('fullHeightToggle');
+        const outputDiv = document.getElementById('output');
+
+        const envelopeImage = new Image();
+        envelopeImage.crossOrigin = 'Anonymous';
+        envelopeImage.src = 'https://res.cloudinary.com/kodair/image/upload/v1750721360/MaineCardworks/A7_envelope-removebg_udidyz.png';
+        
+        let rotatedEnvelopeCanvas = null;
+
+        envelopeToggle.addEventListener('change', () => {
+            fullHeightToggle.disabled = envelopeToggle.checked;
+            if (envelopeToggle.checked) {
+                fullHeightToggle.checked = false;
+            }
+        });
+
+        const splitHandlers = {
+            horizontal: splitHorizontal,
+            vertical: splitVertical,
+            quadrant: splitQuadrants,
+        };
+
+        function setupButton(button, splitType) {
+            button.addEventListener('click', () => {
+                const files = fileInput.files;
+                if (files.length === 0 || !Array.from(files).every(file => file.name.endsWith('.pdf'))) {
+                    alert('Please select one or more valid PDF files.');
+                    return;
+                }
+                
+                outputDiv.innerHTML = '<h3>Processing...</h3>';
+
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    
+                    reader.onload = async (event) => {
+                        try {
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+
+                            const pdfData = new Uint8Array(event.target.result);
+                            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                            
+                            if (outputDiv.innerHTML.includes('Processing')) {
+                                outputDiv.innerHTML = '';
+                            }
+                            await processPdf(pdf, splitHandlers[splitType]);
+
+                        } catch (error) {
+                            console.error('Error processing file:', file.name, error);
+                            alert(`An error occurred while processing ${file.name}: ${error.message}`);
+                            outputDiv.innerHTML = 'Processing failed. Please check the console for details.';
+                        }
+                    };
+
+                    reader.onerror = () => {
+                        console.error('Error reading file:', file.name);
+                        alert(`Failed to read the file: ${file.name}`);
+                    };
+                    
+                    reader.readAsArrayBuffer(file);
+                });
+            });
+        }
+        
+        setupButton(verticalSplitButton, 'horizontal');
+        setupButton(horizontalSplitButton, 'vertical');
+        setupButton(quadrantSplitButton, 'quadrant');
+
+        async function processPdf(pdf, splitFunction) {
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2 });
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                const renderContext = { canvasContext: tempCanvas.getContext('2d'), viewport: viewport };
+                await page.render(renderContext).promise;
+                splitFunction(tempCanvas, pageNum);
+            }
+        }
+
+        function splitHorizontal(sourceCanvas, pageNum) {
+            const halfWidth = sourceCanvas.width / 2;
+            const leftCanvas = document.createElement('canvas');
+            leftCanvas.width = halfWidth;
+            leftCanvas.height = sourceCanvas.height;
+            leftCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(leftCanvas, `Page-${pageNum}-Left.jpg`);
+
+            const rightCanvas = document.createElement('canvas');
+            rightCanvas.width = halfWidth;
+            rightCanvas.height = sourceCanvas.height;
+            rightCanvas.getContext('2d').drawImage(sourceCanvas, halfWidth, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(rightCanvas, `Page-${pageNum}-Right.jpg`);
+        }
+
+        function splitVertical(sourceCanvas, pageNum) {
+            const halfHeight = sourceCanvas.height / 2;
+            
+            const topCanvas = document.createElement('canvas');
+            topCanvas.width = sourceCanvas.width;
+            topCanvas.height = halfHeight;
+            topCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+            processImage(topCanvas, `Page-${pageNum}-Top.jpg`);
+
+            const bottomCanvas = document.createElement('canvas');
+            bottomCanvas.width = sourceCanvas.width;
+            bottomCanvas.height = halfHeight;
+            bottomCanvas.getContext('2d').drawImage(sourceCanvas, 0, halfHeight, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+            processImage(bottomCanvas, `Page-${pageNum}-Bottom.jpg`);
+        }
+
+        function splitQuadrants(sourceCanvas, pageNum) {
+            const quadrantMode = document.querySelector('input[name="quadrantMode"]:checked').value;
+
+            if (quadrantMode === 'vertical') {
+                const quadWidth = sourceCanvas.width / 4;
+                const quadHeight = sourceCanvas.height;
+                for (let i = 0; i < 4; i++) {
+                    const quadCanvas = document.createElement('canvas');
+                    quadCanvas.width = quadWidth;
+                    quadCanvas.height = quadHeight;
+                    const sx = i * quadWidth;
+                    quadCanvas.getContext('2d').drawImage(sourceCanvas, sx, 0, quadWidth, quadHeight, 0, 0, quadWidth, quadHeight);
+                    processImage(quadCanvas, `Page-${pageNum}-V-Quad-${i + 1}.jpg`);
+                }
+            } else {
+                const quadWidth = sourceCanvas.width;
+                const quadHeight = sourceCanvas.height / 4;
+                for (let i = 0; i < 4; i++) {
+                    const quadCanvas = document.createElement('canvas');
+                    quadCanvas.width = quadWidth;
+                    quadCanvas.height = quadHeight;
+                    const sy = i * quadHeight;
+                    quadCanvas.getContext('2d').drawImage(sourceCanvas, 0, sy, quadWidth, quadHeight, 0, 0, quadWidth, quadHeight);
+                    processImage(quadCanvas, `Page-${pageNum}-H-Quad-${i + 1}.jpg`);
+                }
+            }
+        }
+        
+        function getRotatedEnvelope() {
+            if (rotatedEnvelopeCanvas) return rotatedEnvelopeCanvas;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = envelopeImage.naturalHeight;
+            tempCanvas.height = envelopeImage.naturalWidth;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+            tempCtx.rotate(Math.PI / 2);
+            tempCtx.drawImage(envelopeImage, -envelopeImage.naturalWidth / 2, -envelopeImage.naturalHeight / 2);
+            rotatedEnvelopeCanvas = tempCanvas;
+            return rotatedEnvelopeCanvas;
+        }
+
+        function processImage(cardCanvas, fileName) {
+            if (!backgroundToggle.checked && !envelopeToggle.checked) {
+                displayImage(cardCanvas.toDataURL('image/jpeg'), fileName.replace(/\.[^/.]+$/, ".jpg"));
+                return;
+            }
+
+            const finalCanvas = document.getElementById('compositeCanvas');
+            const finalCtx = finalCanvas.getContext('2d');
+            const useTransparentBg = !backgroundToggle.checked;
+            const format = useTransparentBg ? 'image/png' : 'image/jpeg';
+            const extension = useTransparentBg ? '.png' : '.jpg';
+            const newFileName = fileName.replace(/\.[^/.]+$/, "") + extension;
+
+            if (!envelopeToggle.checked && fullHeightToggle.checked) {
+                const maxDimension = Math.max(cardCanvas.width, cardCanvas.height);
+                finalCanvas.width = maxDimension;
+                finalCanvas.height = maxDimension;
+                if (useTransparentBg) {
+                    finalCtx.clearRect(0, 0, maxDimension, maxDimension);
+                } else {
+                    finalCtx.fillStyle = backgroundColorInput.value;
+                    finalCtx.fillRect(0, 0, maxDimension, maxDimension);
+                }
+                const xOffset = (maxDimension - cardCanvas.width) / 2;
+                const yOffset = (maxDimension - cardCanvas.height) / 2;
+                finalCtx.drawImage(cardCanvas, xOffset, yOffset);
+                displayImage(finalCanvas.toDataURL(format), newFileName);
+                return;
+            }
+
+            const finalSize = 1200;
+            finalCanvas.width = finalSize;
+            finalCanvas.height = finalSize;
+            if (useTransparentBg) {
+                finalCtx.clearRect(0, 0, finalSize, finalSize);
+            } else {
+                finalCtx.fillStyle = backgroundColorInput.value;
+                finalCtx.fillRect(0, 0, finalSize, finalSize);
+            }
+
+            const cardScaleFactor = 0.75;
+            const cardAspectRatio = cardCanvas.width / cardCanvas.height;
+            let scaledCardWidth, scaledCardHeight;
+            if (cardAspectRatio > 1) {
+                scaledCardWidth = finalSize * cardScaleFactor;
+                scaledCardHeight = scaledCardWidth / cardAspectRatio;
+            } else {
+                scaledCardHeight = finalSize * cardScaleFactor;
+                scaledCardWidth = scaledCardHeight * cardAspectRatio;
+            }
+            
+            let cardX = (finalSize / 2) - (scaledCardWidth / 2);
+            let cardY = (finalSize / 2) - (scaledCardHeight / 2);
+
+            if (envelopeToggle.checked) {
+                if (!envelopeImage.complete || envelopeImage.naturalHeight === 0) {
+                    envelopeImage.onload = () => processImage(cardCanvas, fileName);
+                    return;
+                }
+                const isHorizontal = cardCanvas.width > cardCanvas.height;
+                const envelopeSource = isHorizontal ? getRotatedEnvelope() : envelopeImage;
+
+                const PEEK = finalSize * 0.04;
+                let targetEnvelopeWidth = scaledCardWidth + PEEK;
+                let targetEnvelopeHeight = scaledCardHeight + PEEK;
+                const envelopeAspectRatio = envelopeSource.width / envelopeSource.height;
+                let scaledEnvelopeWidth = targetEnvelopeWidth;
+                let scaledEnvelopeHeight = scaledEnvelopeWidth / envelopeAspectRatio;
+                if (scaledEnvelopeHeight < targetEnvelopeHeight) {
+                    scaledEnvelopeHeight = targetEnvelopeHeight;
+                    scaledEnvelopeWidth = scaledEnvelopeHeight * envelopeAspectRatio;
+                }
+                
+                const offset = finalSize * 0.05;
+                const envelopeX = (finalSize / 2) - (scaledEnvelopeWidth / 2) - offset;
+                const envelopeY = (finalSize / 2) - (scaledEnvelopeHeight / 2) - offset;
+                cardX = (finalSize / 2) - (scaledCardWidth / 2) + offset;
+                cardY = (finalSize / 2) - (scaledCardHeight / 2) + offset;
+                
+                finalCtx.drawImage(envelopeSource, envelopeX, envelopeY, scaledEnvelopeWidth, scaledEnvelopeHeight);
+            }
+
+            finalCtx.drawImage(cardCanvas, cardX, cardY, scaledCardWidth, scaledCardHeight);
+            displayImage(finalCanvas.toDataURL(format), newFileName);
+        }
+
+        function displayImage(dataURL, fileName) {
+            const container = document.createElement('div');
+            container.className = 'output-container';
+            container.style.display = 'inline-block';
+            container.style.verticalAlign = 'top';
+            container.style.margin = '10px';
+
+            const imgElement = document.createElement('img');
+            imgElement.src = dataURL;
+            container.appendChild(imgElement);
+            
+            const downloadButton = document.createElement('button');
+            downloadButton.textContent = `Download ${fileName}`;
+            container.appendChild(downloadButton);
+            
+            downloadButton.addEventListener('click', () => {
+                const link = document.createElement('a');
+                link.href = dataURL;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+            outputDiv.appendChild(container);
+        }
+    </script>
+</body>
 </html>
