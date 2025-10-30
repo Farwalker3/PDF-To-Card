@@ -1,10 +1,244 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-		<title></title>
-	</head>
-	<body>
-		
-	</body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Split and Process</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        #output img {
+            max-width: 200px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        canvas {
+            display: none;
+        }
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button img {
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>PDF Split and Process</h1>
+    <p>Select one or more PDFs and choose how to split their pages:</p>
+    <input type="file" id="fileInput" accept=".pdf" multiple>
+
+    <div class="controls">
+        <label>
+            <input type="checkbox" id="backgroundToggle" checked>
+            Enable Background Processing
+        </label>
+        <br>
+        <label>
+            Background Color: 
+            <input type="color" id="backgroundColor" value="#474E5A">
+        </label>
+    </div>
+
+    <button id="verticalSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M10 2.5a.5.5 0 0 0-1 0v15a.5.5 0 0 0 1 0zM2 6a2 2 0 0 1 2-2h4v12H4a2 2 0 0 1-2-2zm9 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4z'/%3E%3C/svg%3E" alt="Vertical Icon">
+        Split Vertically (Left & Right)
+    </button>
+    <button id="horizontalSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M17.5 10a.5.5 0 0 0 0-1h-15a.5.5 0 0 0 0 1zM14 2a2 2 0 0 1 2 2v4H4V4a2 2 0 0 1 2-2zM4 11v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4z'/%3E%3C/svg%3E" alt="Horizontal Icon">
+        Split Horizontally (Top & Bottom)
+    </button>
+    <button id="quadrantSplitButton">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M2 2h7v7H2zM11 2h7v7h-7zM2 11h7v7H2zM11 11h7v7h-7z'/%3E%3C/svg%3E" alt="Quadrant Icon">
+        Split Into Quadrants
+    </button>
+
+    <div id="output"></div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const horizontalSplitButton = document.getElementById('horizontalSplitButton');
+        const verticalSplitButton = document.getElementById('verticalSplitButton');
+        const quadrantSplitButton = document.getElementById('quadrantSplitButton');
+        const backgroundToggle = document.getElementById('backgroundToggle');
+        const backgroundColorInput = document.getElementById('backgroundColor');
+        const outputDiv = document.getElementById('output');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const splitHandlers = {
+            horizontal: splitHorizontal,
+            vertical: splitVertical,
+            quadrant: splitQuadrants,
+        };
+
+        function setupButton(button, splitType) {
+            button.addEventListener('click', () => {
+                const files = fileInput.files;
+                if (files.length === 0 || !Array.from(files).every(file => file.name.endsWith('.pdf'))) {
+                    alert('Please upload one or more valid PDF files.');
+                    return;
+                }
+
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const pdfData = new Uint8Array(event.target.result);
+                        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                        await processPdf(pdf, splitHandlers[splitType]);
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            });
+        }
+
+        setupButton(verticalSplitButton, 'horizontal');  // Split Vertically (Left & Right)
+        setupButton(horizontalSplitButton, 'vertical');  // Split Horizontally (Top & Bottom)
+        setupButton(quadrantSplitButton, 'quadrant');     // Split Into Quadrants
+
+        async function processPdf(pdf, splitFunction) {
+            outputDiv.innerHTML = ''; // Clear previous output
+
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2 });
+
+                // Render the page on a temporary canvas
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+
+                const renderContext = {
+                    canvasContext: tempCtx,
+                    viewport: viewport,
+                };
+                await page.render(renderContext).promise;
+
+                // Split and process the page using the specified function
+                splitFunction(tempCanvas, pageNum);
+            }
+        }
+
+        function splitHorizontal(sourceCanvas, pageNum) {
+            const halfWidth = sourceCanvas.width / 2;
+
+            // Left Half
+            const leftCanvas = document.createElement('canvas');
+            const leftCtx = leftCanvas.getContext('2d');
+            leftCanvas.width = halfWidth;
+            leftCanvas.height = sourceCanvas.height;
+            leftCtx.drawImage(sourceCanvas, 0, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(leftCanvas, `Page-${pageNum}-Left.jpg`);
+
+            // Right Half
+            const rightCanvas = document.createElement('canvas');
+            const rightCtx = rightCanvas.getContext('2d');
+            rightCanvas.width = halfWidth;
+            rightCanvas.height = sourceCanvas.height;
+            rightCtx.drawImage(sourceCanvas, halfWidth, 0, halfWidth, sourceCanvas.height, 0, 0, halfWidth, sourceCanvas.height);
+            processImage(rightCanvas, `Page-${pageNum}-Right.jpg`);
+        }
+
+        function splitVertical(sourceCanvas, pageNum) {
+            const halfHeight = sourceCanvas.height / 2;
+
+            // Top Half
+            const topCanvas = document.createElement('canvas');
+            const topCtx = topCanvas.getContext('2d');
+            topCanvas.width = sourceCanvas.width;
+            topCanvas.height = halfHeight;
+            topCtx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+
+            // Rotate top half 180 degrees
+            const rotatedCanvas = document.createElement('canvas');
+            const rotatedCtx = rotatedCanvas.getContext('2d');
+            rotatedCanvas.width = topCanvas.width;
+            rotatedCanvas.height = topCanvas.height;
+            rotatedCtx.translate(rotatedCanvas.width, rotatedCanvas.height);
+            rotatedCtx.rotate(Math.PI);
+            rotatedCtx.drawImage(topCanvas, 0, 0);
+            processImage(rotatedCanvas, `Page-${pageNum}-Top.jpg`);
+
+            // Bottom Half
+            const bottomCanvas = document.createElement('canvas');
+            const bottomCtx = bottomCanvas.getContext('2d');
+            bottomCanvas.width = sourceCanvas.width;
+            bottomCanvas.height = halfHeight;
+            bottomCtx.drawImage(sourceCanvas, 0, halfHeight, sourceCanvas.width, halfHeight, 0, 0, sourceCanvas.width, halfHeight);
+            processImage(bottomCanvas, `Page-${pageNum}-Bottom.jpg`);
+        }
+
+        function splitQuadrants(sourceCanvas, pageNum) {
+            const halfWidth = sourceCanvas.width / 2;
+            const halfHeight = sourceCanvas.height / 2;
+
+            const regions = [
+                { name: 'Top-Left', sx: 0, sy: 0 },
+                { name: 'Top-Right', sx: halfWidth, sy: 0 },
+                { name: 'Bottom-Left', sx: 0, sy: halfHeight },
+                { name: 'Bottom-Right', sx: halfWidth, sy: halfHeight },
+            ];
+
+            regions.forEach(region => {
+                const quadCanvas = document.createElement('canvas');
+                const quadCtx = quadCanvas.getContext('2d');
+                quadCanvas.width = halfWidth;
+                quadCanvas.height = halfHeight;
+                quadCtx.drawImage(sourceCanvas, region.sx, region.sy, halfWidth, halfHeight, 0, 0, halfWidth, halfHeight);
+                processImage(quadCanvas, `Page-${pageNum}-${region.name}.jpg`);
+            });
+        }
+
+        function processImage(sourceCanvas, fileName) {
+            if (!backgroundToggle.checked) {
+                const dataURL = sourceCanvas.toDataURL('image/jpeg');
+                displayImage(dataURL, fileName);
+                return;
+            }
+
+            const maxDimension = Math.max(sourceCanvas.width, sourceCanvas.height);
+            canvas.width = maxDimension;
+            canvas.height = maxDimension;
+
+            const backgroundColor = backgroundColorInput.value;
+            ctx.fillStyle = backgroundColor;
+            ctx.fillRect(0, 0, maxDimension, maxDimension);
+
+            const xOffset = (maxDimension - sourceCanvas.width) / 2;
+            const yOffset = (maxDimension - sourceCanvas.height) / 2;
+            ctx.drawImage(sourceCanvas, xOffset, yOffset);
+
+            const dataURL = canvas.toDataURL('image/jpeg');
+            displayImage(dataURL, fileName);
+        }
+
+        function displayImage(dataURL, fileName) {
+            const imgElement = document.createElement('img');
+            imgElement.src = dataURL;
+            outputDiv.appendChild(imgElement);
+
+            const downloadLink = document.createElement('a');
+            downloadLink.href = dataURL;
+            downloadLink.download = fileName;
+            downloadLink.textContent = `Download ${fileName}`;
+            downloadLink.style.display = 'block';
+            outputDiv.appendChild(downloadLink);
+        }
+    </script>
+</body>
 </html>
